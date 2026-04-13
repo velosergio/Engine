@@ -13,7 +13,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 FROM base AS builder
 
@@ -41,11 +41,11 @@ ENV DATABASE_URL=${DATABASE_URL}
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 
-RUN npm ci --omit=dev
+RUN npm ci --legacy-peer-deps
 
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/next.config.ts ./next.config.ts
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
