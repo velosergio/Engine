@@ -4,6 +4,8 @@ import type { GameBalancePayload, UnitBalance } from "@/lib/game-balance-types";
 export type { GameBalancePayload, UnitBalance } from "@/lib/game-balance-types";
 export { attackIntervalFromAps } from "@/lib/game-balance-types";
 
+const REQUIRED_UNIT_SLUGS = ["base", "soldier_ally"] as const;
+
 function ruleNum(rules: Map<string, string>, key: string, fallback: number) {
   const v = rules.get(key);
   if (v === undefined) return fallback;
@@ -29,6 +31,13 @@ export async function getGameBalance(): Promise<GameBalancePayload> {
       attacksPerSecond: u.attacksPerSecond,
       team: u.team,
     };
+  }
+
+  const missing = REQUIRED_UNIT_SLUGS.filter((slug) => !units[slug]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Faltan unidades requeridas en DB: ${missing.join(", ")}. Ejecuta prisma db seed.`,
+    );
   }
 
   const fallbackCd = ruleNum(rules, "attack_cooldown_ms", 1000);

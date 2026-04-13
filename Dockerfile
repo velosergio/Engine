@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -53,4 +53,4 @@ COPY --from=builder /app/next.config.ts ./next.config.ts
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node -e \"const {execSync}=require('node:child_process'); const {PrismaClient}=require('@prisma/client'); (async()=>{const p=new PrismaClient(); try { const count=await p.unitDefinition.count(); if(count===0){ console.log('DB vacia: ejecutando seed...'); execSync('npx prisma db seed',{stdio:'inherit'}); } else { console.log('DB con datos: se omite seed.'); } } finally { await p.$disconnect(); } })().catch((e)=>{ console.error(e); process.exit(1); });\" && npm run start"]
