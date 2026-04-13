@@ -1,20 +1,30 @@
 import * as Phaser from "phaser";
+import { AiDirector } from "@/game/ai/AiDirector";
+import { DAMAGE_BONUS_PER_PURCHASE } from "@/lib/damage-upgrade-economy";
+import { type GameBalancePayload } from "@/lib/game-balance-types";
+import type { MatchOutcome } from "@/lib/match-end-types";
+import { soldierAttackIntervalMs } from "@/lib/soldier-attack-interval";
 import {
-  attackIntervalFromAps,
-  type GameBalancePayload,
-} from "@/lib/game-balance-types";
-
-type TeamSide = "ally" | "enemy";
+  registerBattleTextures,
+  TEX_ALLY,
+  TEX_BASE,
+  TEX_GROUND,
+} from "@/game/pixel/renderPixelArt";
 
 type UnitRow = {
   id: string;
-  team: TeamSide;
+  playerId: number;
   hp: number;
   maxHp: number;
   attack: number;
   speed: number;
   attackIntervalMs: number;
-  rect: Phaser.GameObjects.Rectangle;
+  sprite: Phaser.GameObjects.Image;
+  logicX: number;
+  logicY: number;
+  hitW: number;
+  hitH: number;
+  bobPhase: number;
   lastStrikeAt: number;
   isBase: boolean;
   hpBarBg?: Phaser.GameObjects.Rectangle;
@@ -27,25 +37,51 @@ function uid() {
   return `u${_uid}`;
 }
 
-const COLLISION_PAD = 2;
+const COLLISION_PAD = 4;
+
+const TINT_HUMAN = 0xffffff;
+const TINT_AI = 0xffb090;
 
 function collisionHalf(u: UnitRow) {
   return {
-    hw: u.rect.width / 2 + COLLISION_PAD,
-    hh: u.rect.height / 2 + COLLISION_PAD,
+    hw: u.hitW / 2 + COLLISION_PAD,
+    hh: u.hitH / 2 + COLLISION_PAD,
   };
+}
+
+function baseCenterForPlayer(
+  playerId: number,
+  playerCount: number,
+  mapWidth: number,
+  mapHeight: number,
+  baseHeight: number,
+): { x: number; y: number } {
+  if (playerId === 0) {
+    return { x: mapWidth / 2, y: mapHeight - baseHeight / 2 };
+  }
+  const x = (mapWidth * playerId) / playerCount;
+  /** Borde superior del mapa: el rectángulo de la base toca y=0. */
+  return { x, y: baseHeight / 2 };
 }
 
 export class BattleScene extends Phaser.Scene {
   private balance!: GameBalancePayload;
   private units: UnitRow[] = [];
-  private baseRow: UnitRow | null = null;
+  /** Bases por jugador (mismo índice que playerId). */
+  private bases: (UnitRow | null)[] = [];
   private hud!: Phaser.GameObjects.Text;
   private spawnTimer!: Phaser.Time.TimerEvent;
   private combatTimer!: Phaser.Time.TimerEvent;
+  private spawnSlotIndex = 0;
+  /** Bonus de ataque acumulado por compras; se suma al spawn y a unidades vivas. */
+  private attackBonusByPlayer: number[] = [];
+  /** Bonus de golpes/s por compras de velocidad de ataque. */
+  private attackSpeedApsBonusByPlayer: number[] = [];
+  private readonly aiDirector = new AiDirector();
   private readonly vSeek = new Phaser.Math.Vector2();
   private readonly vSep = new Phaser.Math.Vector2();
   private readonly vClose = new Phaser.Math.Vector2();
+  private matchEnded = false;
 
   constructor() {
     super({ key: "BattleScene" });
@@ -53,60 +89,70 @@ export class BattleScene extends Phaser.Scene {
 
   create() {
     this.balance = this.registry.get("balance") as GameBalancePayload;
-    const { mapWidth, mapHeight, baseWidth, baseHeight } = this.balance;
+    const { mapWidth, mapHeight, baseWidth, baseHeight, playerCount } =
+      this.balance;
 
-    this.add.rectangle(0, 0, mapWidth, mapHeight, 0x1e2636).setOrigin(0);
+    registerBattleTextures(this);
 
-    const bx = mapWidth / 2;
-    const by = mapHeight - baseHeight / 2;
+    this.add
+      .tileSprite(0, 0, mapWidth, mapHeight, TEX_GROUND)
+      .setOrigin(0)
+      .setDepth(-10);
+
     const baseDef = this.balance.units.base;
-    const baseRect = this.add.rectangle(bx, by, baseWidth, baseHeight, 0x2d6a4f);
-    this.baseRow = {
-      id: "base",
-      team: "ally",
-      hp: baseDef.maxHp,
-      maxHp: baseDef.maxHp,
-      attack: baseDef.attack,
-      speed: 0,
-      attackIntervalMs: 999999999,
-      rect: baseRect,
-      lastStrikeAt: 0,
-      isBase: true,
-    };
-    this.units.push(this.baseRow);
-    this.attachHpBar(this.baseRow, true);
+    this.attackBonusByPlayer = Array.from({ length: playerCount }, () => 0);
+    this.attackSpeedApsBonusByPlayer = Array.from({ length: playerCount }, () => 0);
+    this.bases = Array.from({ length: playerCount }, () => null);
 
-    const enemyDef = this.balance.units.soldier_enemy;
-    const ex = mapWidth / 2;
-    const ey = 48;
-    const enemyRect = this.add.rectangle(ex, ey, 20, 20, 0xc1121f);
-    const enemyRow: UnitRow = {
-      id: uid(),
-      team: "enemy",
-      hp: enemyDef.maxHp,
-      maxHp: enemyDef.maxHp,
-      attack: enemyDef.attack,
-      speed: enemyDef.speed,
-      attackIntervalMs: attackIntervalFromAps(
-        enemyDef.attacksPerSecond,
-        this.balance.attackCooldownMs,
-      ),
-      rect: enemyRect,
-      lastStrikeAt: 0,
-      isBase: false,
-    };
-    this.units.push(enemyRow);
-    this.attachHpBar(enemyRow, false);
+    for (let p = 0; p < playerCount; p++) {
+      const { x: bx, y: by } = baseCenterForPlayer(
+        p,
+        playerCount,
+        mapWidth,
+        mapHeight,
+        baseHeight,
+      );
+      const tint = p === 0 ? TINT_HUMAN : TINT_AI;
+      const baseSprite = this.add
+        .image(bx, by, TEX_BASE)
+        .setDisplaySize(baseWidth, baseHeight)
+        .setTint(tint)
+        .setDepth(p === 0 ? 2 : 3);
+      const row: UnitRow = {
+        id: `base_p${p}`,
+        playerId: p,
+        hp: baseDef.maxHp,
+        maxHp: baseDef.maxHp,
+        attack: baseDef.attack,
+        speed: 0,
+        attackIntervalMs: 999999999,
+        sprite: baseSprite,
+        logicX: bx,
+        logicY: by,
+        hitW: baseWidth,
+        hitH: baseHeight,
+        bobPhase: 0,
+        lastStrikeAt: 0,
+        isBase: true,
+      };
+      this.bases[p] = row;
+      this.units.push(row);
+      this.attachHpBar(row, true);
+    }
 
     this.hud = this.add
-      .text(8, 8, "", { fontSize: "14px", color: "#e0e0e0" })
+      .text(16, 16, "", {
+        fontSize: "28px",
+        color: "#e0e0e0",
+        resolution: 2,
+      })
       .setScrollFactor(0)
       .setDepth(200);
 
     this.spawnTimer = this.time.addEvent({
       delay: this.balance.spawnIntervalMs,
       loop: true,
-      callback: () => this.spawnAlly(),
+      callback: () => this.spawnTickMirrored(),
     });
 
     this.combatTimer = this.time.addEvent({
@@ -115,10 +161,205 @@ export class BattleScene extends Phaser.Scene {
       callback: () => this.combatTick(),
     });
 
-    this.spawnAlly();
+    this.aiDirector.setBattleApi({
+      applyDamageUpgradeForPlayer: (playerId: number) =>
+        this.applyDamageUpgradeForPlayer(playerId),
+      applyAttackSpeedUpgradeForPlayer: (playerId: number) =>
+        this.applyAttackSpeedUpgradeForPlayer(playerId),
+    });
+    this.aiDirector.onMatchStart({
+      playerCount,
+      balance: this.balance,
+    });
+
+    this.spawnTickMirrored();
+
+    this.game.events.emit("battle-ready");
+  }
+
+  /**
+   * Sube el daño de todas las unidades móviles actuales del jugador y los futuros spawns.
+   */
+  applyDamageUpgradeForPlayer(playerId: number): boolean {
+    if (playerId < 0 || playerId >= this.balance.playerCount) return false;
+
+    const delta = DAMAGE_BONUS_PER_PURCHASE;
+    this.attackBonusByPlayer[playerId] += delta;
+
+    for (const u of this.units) {
+      if (u.playerId !== playerId || u.isBase || u.hp <= 0) continue;
+      u.attack += delta;
+    }
+    return true;
+  }
+
+  getAttackBonusForPlayer(playerId: number): number {
+    return this.attackBonusByPlayer[playerId] ?? 0;
+  }
+
+  getAttackSpeedApsBonusForPlayer(playerId: number): number {
+    return this.attackSpeedApsBonusByPlayer[playerId] ?? 0;
+  }
+
+  /** Depuración: suma ataque plano al bonus y a soldados vivos del jugador. */
+  debugAddFlatDamageBonusForPlayer(playerId: number, delta: number): boolean {
+    if (playerId < 0 || playerId >= this.balance.playerCount) return false;
+    if (!Number.isFinite(delta) || delta <= 0) return false;
+
+    this.attackBonusByPlayer[playerId] += delta;
+    for (const u of this.units) {
+      if (u.playerId !== playerId || u.isBase || u.hp <= 0) continue;
+      u.attack += delta;
+    }
+    return true;
+  }
+
+  /** Depuración: suma APS al bonus y recalcula intervalos de soldados vivos. */
+  debugAddFlatAttackSpeedApsForPlayer(
+    playerId: number,
+    delta: number,
+  ): boolean {
+    if (playerId < 0 || playerId >= this.balance.playerCount) return false;
+    if (!Number.isFinite(delta) || delta <= 0) return false;
+
+    this.attackSpeedApsBonusByPlayer[playerId] += delta;
+
+    const def = this.balance.units.soldier_ally;
+    const bonus = this.attackSpeedApsBonusByPlayer[playerId];
+    const cd = this.balance.attackCooldownMs;
+
+    for (const u of this.units) {
+      if (u.playerId !== playerId || u.isBase || u.hp <= 0) continue;
+      u.attackIntervalMs = soldierAttackIntervalMs(
+        def.attacksPerSecond,
+        bonus,
+        cd,
+      );
+    }
+    return true;
+  }
+
+  /** Depuración: fuerza victoria humana dejando bases enemigas en 0 HP. */
+  debugForceHumanVictory(): boolean {
+    if (this.matchEnded) return false;
+    if (this.balance.playerCount <= 1) return false;
+
+    let changed = false;
+    for (let p = 1; p < this.bases.length; p++) {
+      const base = this.bases[p];
+      if (!base) continue;
+      if (base.hp > 0) {
+        base.hp = 0;
+        changed = true;
+      }
+    }
+
+    if (!changed) return false;
+    this.checkMatchEndAfterBaseHit();
+    return true;
+  }
+
+  /**
+   * Sube APS efectivos del soldado para unidades vivas y futuros spawns del jugador.
+   */
+  applyAttackSpeedUpgradeForPlayer(playerId: number): boolean {
+    if (playerId < 0 || playerId >= this.balance.playerCount) return false;
+
+    const add = this.balance.attackSpeedApsPerPurchase;
+    if (!Number.isFinite(add) || add <= 0) return false;
+
+    this.attackSpeedApsBonusByPlayer[playerId] += add;
+
+    const def = this.balance.units.soldier_ally;
+    const bonus = this.attackSpeedApsBonusByPlayer[playerId];
+    const cd = this.balance.attackCooldownMs;
+
+    for (const u of this.units) {
+      if (u.playerId !== playerId || u.isBase || u.hp <= 0) continue;
+      u.attackIntervalMs = soldierAttackIntervalMs(
+        def.attacksPerSecond,
+        bonus,
+        cd,
+      );
+    }
+    return true;
+  }
+
+  /** Un tick de spawn: humano + espejo para cada IA (mismo slotIndex). */
+  private spawnTickMirrored() {
+    const slot = this.spawnSlotIndex;
+    this.spawnSlotIndex += 1;
+
+    this.spawnSoldierForPlayer(0, slot);
+    this.aiDirector.onHumanBaseCommand({ type: "spawn_soldier", slotIndex: slot });
+
+    for (let p = 1; p < this.balance.playerCount; p++) {
+      this.spawnSoldierForPlayer(p, slot);
+    }
+  }
+
+  private spawnSoldierForPlayer(playerId: number, slotIndex: number) {
+    const def = this.balance.units.soldier_ally;
+    const { mapWidth, mapHeight, baseHeight } = this.balance;
+    const basePos = baseCenterForPlayer(
+      playerId,
+      this.balance.playerCount,
+      mapWidth,
+      mapHeight,
+      baseHeight,
+    );
+
+    const offsetX = ((slotIndex % 9) - 4) * 52;
+    const sx = basePos.x + offsetX;
+    const sy =
+      playerId === 0
+        ? mapHeight - baseHeight - 24
+        : basePos.y + baseHeight / 2 + 24;
+
+    const aw = 36;
+    const ah = 36;
+    const tint = playerId === 0 ? TINT_HUMAN : TINT_AI;
+    const spr = this.add
+      .image(sx, sy, TEX_ALLY)
+      .setDisplaySize(aw, ah)
+      .setTint(tint);
+
+    const bonus = this.attackBonusByPlayer[playerId] ?? 0;
+    const apsBonus = this.attackSpeedApsBonusByPlayer[playerId] ?? 0;
+    const row: UnitRow = {
+      id: uid(),
+      playerId,
+      hp: def.maxHp,
+      maxHp: def.maxHp,
+      attack: def.attack + bonus,
+      speed: def.speed,
+      attackIntervalMs: soldierAttackIntervalMs(
+        def.attacksPerSecond,
+        apsBonus,
+        this.balance.attackCooldownMs,
+      ),
+      sprite: spr,
+      logicX: sx,
+      logicY: sy,
+      hitW: aw,
+      hitH: ah,
+      bobPhase: Math.random() * Math.PI * 2,
+      lastStrikeAt: 0,
+      isBase: false,
+    };
+    this.units.push(row);
+    this.attachHpBar(row, false);
   }
 
   update(_t: number, delta: number) {
+    if (this.matchEnded) return;
+
+    this.aiDirector.onTick(this.time.now, {
+      time: this.time.now,
+      playerCount: this.balance.playerCount,
+      deltaMs: delta,
+    });
+
     const dt = delta / 1000;
 
     for (const u of this.units) {
@@ -135,22 +376,34 @@ export class BattleScene extends Phaser.Scene {
       const len = Math.hypot(vx, vy);
       const maxStep = u.speed * dt;
       if (len < 1e-5) continue;
-      u.rect.x += (vx / len) * maxStep;
-      u.rect.y += (vy / len) * maxStep;
+      u.logicX += (vx / len) * maxStep;
+      u.logicY += (vy / len) * maxStep;
     }
 
     this.resolveSolidOverlaps();
     this.clampMobilesToMap();
+    this.syncUnitSpritesWithBob();
     this.syncHpBars();
     this.refreshHud();
   }
 
-  /** Hueco entre bordes de los rectángulos (0 = solapado o tocando en eje). */
+  private syncUnitSpritesWithBob() {
+    const t = this.time.now;
+    for (const u of this.units) {
+      if (u.hp <= 0 && !u.isBase) continue;
+      const bob =
+        !u.isBase && u.hp > 0
+          ? Math.sin(t * 0.007 + u.bobPhase) * 1.5
+          : 0;
+      u.sprite.setPosition(u.logicX, u.logicY + bob);
+    }
+  }
+
   private edgeGapBetween(a: UnitRow, b: UnitRow): number {
-    const dx = Math.abs(a.rect.x - b.rect.x);
-    const dy = Math.abs(a.rect.y - b.rect.y);
-    const hx = a.rect.width / 2 + b.rect.width / 2;
-    const hy = a.rect.height / 2 + b.rect.height / 2;
+    const dx = Math.abs(a.logicX - b.logicX);
+    const dy = Math.abs(a.logicY - b.logicY);
+    const hx = a.hitW / 2 + b.hitW / 2;
+    const hy = a.hitH / 2 + b.hitH / 2;
     const gx = Math.max(0, dx - hx);
     const gy = Math.max(0, dy - hy);
     return Math.hypot(gx, gy);
@@ -162,45 +415,40 @@ export class BattleScene extends Phaser.Scene {
     u: UnitRow,
     out: Phaser.Math.Vector2,
   ) {
-    const hw = u.rect.width / 2;
-    const hh = u.rect.height / 2;
+    const hw = u.hitW / 2;
+    const hh = u.hitH / 2;
     out.set(
-      Phaser.Math.Clamp(px, u.rect.x - hw, u.rect.x + hw),
-      Phaser.Math.Clamp(py, u.rect.y - hh, u.rect.y + hh),
+      Phaser.Math.Clamp(px, u.logicX - hw, u.logicX + hw),
+      Phaser.Math.Clamp(py, u.logicY - hh, u.logicY + hh),
     );
   }
 
-  /**
-   * Acercarse al enemigo hasta que el hueco entre cajas sea ≤ melé;
-   * alineado con la comprobación de golpes (evita quedar a 1px sin pegar).
-   */
   private seekTowardMeleeGap(u: UnitRow, foe: UnitRow) {
     const maxGap = this.balance.meleeEdgeGapMaxPx;
     if (this.edgeGapBetween(u, foe) <= maxGap) {
       this.vSeek.set(0, 0);
       return;
     }
-    this.setClosestPointOnRect(u.rect.x, u.rect.y, foe, this.vClose);
-    let wx = this.vClose.x - u.rect.x;
-    let wy = this.vClose.y - u.rect.y;
+    this.setClosestPointOnRect(u.logicX, u.logicY, foe, this.vClose);
+    let wx = this.vClose.x - u.logicX;
+    let wy = this.vClose.y - u.logicY;
     let wlen = Math.hypot(wx, wy);
     if (wlen < 1e-4) {
-      wx = u.rect.y - foe.rect.y || 0.001;
-      wy = foe.rect.x - u.rect.x || 0.001;
+      wx = u.logicY - foe.logicY || 0.001;
+      wy = foe.logicX - u.logicX || 0.001;
       wlen = Math.hypot(wx, wy) || 1;
     }
     this.vSeek.set(wx / wlen, wy / wlen);
   }
 
-  /** Solo aliados entre sí (no empuja enemigos). */
   private accumulateSeparation(u: UnitRow) {
     const R = this.balance.aiSeparationRadiusPx;
     const w = this.balance.aiSeparationWeight;
 
     for (const o of this.units) {
-      if (o === u || o.hp <= 0 || o.team !== u.team) continue;
-      const dx = u.rect.x - o.rect.x;
-      const dy = u.rect.y - o.rect.y;
+      if (o === u || o.hp <= 0 || o.playerId !== u.playerId) continue;
+      const dx = u.logicX - o.logicX;
+      const dy = u.logicY - o.logicY;
       const d = Math.hypot(dx, dy);
       if (d >= R || d < 1e-4) continue;
       const strength = (R - d) / R;
@@ -209,13 +457,23 @@ export class BattleScene extends Phaser.Scene {
     }
   }
 
+  /** IA (norte): barra bajo la unidad; humano: barra encima. */
+  private hpBarRectOrigin(u: UnitRow, isBase: boolean): { x: number; y: number } {
+    const bw = isBase ? 224 : 60;
+    const yOffAbove = isBase ? 72 : 30;
+    const gapBelow = 10;
+    const x = u.logicX - bw / 2;
+    if (u.playerId > 0) {
+      return { x, y: u.logicY + u.hitH / 2 + gapBelow };
+    }
+    return { x, y: u.logicY - u.hitH / 2 - yOffAbove };
+  }
+
   private attachHpBar(u: UnitRow, isBase: boolean) {
-    const bw = isBase ? 112 : 30;
-    const bh = 5;
-    const yOff = isBase ? 36 : 15;
-    const x = u.rect.x - bw / 2;
-    const y = u.rect.y - u.rect.height / 2 - yOff;
-    const fillColor = u.team === "ally" ? 0x2ecc71 : 0xe74c3c;
+    const bw = isBase ? 224 : 60;
+    const bh = 10;
+    const { x, y } = this.hpBarRectOrigin(u, isBase);
+    const fillColor = u.playerId === 0 ? 0x2ecc71 : 0xe67e22;
 
     const bg = this.add.rectangle(x, y, bw, bh, 0x1a1a1a).setOrigin(0, 0);
     const fill = this.add.rectangle(x, y, bw, bh, fillColor).setOrigin(0, 0);
@@ -232,11 +490,9 @@ export class BattleScene extends Phaser.Scene {
       if (u.hp <= 0 && !u.isBase) continue;
 
       const isBase = u.isBase;
-      const bw = isBase ? 112 : 30;
-      const bh = 5;
-      const yOff = isBase ? 36 : 15;
-      const x = u.rect.x - bw / 2;
-      const y = u.rect.y - u.rect.height / 2 - yOff;
+      const bw = isBase ? 224 : 60;
+      const bh = 10;
+      const { x, y } = this.hpBarRectOrigin(u, isBase);
       const ratio = u.maxHp > 0 ? Phaser.Math.Clamp(u.hp / u.maxHp, 0, 1) : 0;
 
       u.hpBarBg.setPosition(x, y).setSize(bw, bh);
@@ -259,8 +515,8 @@ export class BattleScene extends Phaser.Scene {
   private resolvePairOverlap(a: UnitRow, b: UnitRow) {
     const ha = collisionHalf(a);
     const hb = collisionHalf(b);
-    const dx = b.rect.x - a.rect.x;
-    const dy = b.rect.y - a.rect.y;
+    const dx = b.logicX - a.logicX;
+    const dy = b.logicY - a.logicY;
     const overlapX = ha.hw + hb.hw - Math.abs(dx);
     const overlapY = ha.hh + hb.hh - Math.abs(dy);
     if (overlapX <= 0 || overlapY <= 0) return;
@@ -272,51 +528,52 @@ export class BattleScene extends Phaser.Scene {
       if (overlapX < overlapY) {
         const dir = dx >= 0 ? 1 : -1;
         const push = overlapX;
-        if (aStatic && !bStatic) b.rect.x += dir * push;
-        else if (!aStatic && bStatic) a.rect.x -= dir * push;
+        if (aStatic && !bStatic) b.logicX += dir * push;
+        else if (!aStatic && bStatic) a.logicX -= dir * push;
       } else {
         const dir = dy >= 0 ? 1 : -1;
         const push = overlapY;
-        if (aStatic && !bStatic) b.rect.y += dir * push;
-        else if (!aStatic && bStatic) a.rect.y -= dir * push;
+        if (aStatic && !bStatic) b.logicY += dir * push;
+        else if (!aStatic && bStatic) a.logicY -= dir * push;
       }
       return;
     }
 
-    if (a.team !== b.team) {
-      if (a.team === "ally") this.pushCrossOnlyAlly(a, b, overlapX, overlapY);
-      else this.pushCrossOnlyAlly(b, a, overlapX, overlapY);
+    if (a.playerId !== b.playerId) {
+      const low = a.playerId < b.playerId ? a : b;
+      const high = a.playerId < b.playerId ? b : a;
+      this.pushCrossDisplaceLower(low, high, overlapX, overlapY);
       return;
     }
 
     if (overlapX < overlapY) {
       const dir = dx >= 0 ? 1 : -1;
       const push = overlapX;
-      a.rect.x -= dir * (push / 2);
-      b.rect.x += dir * (push / 2);
+      a.logicX -= dir * (push / 2);
+      b.logicX += dir * (push / 2);
     } else {
       const dir = dy >= 0 ? 1 : -1;
       const push = overlapY;
-      a.rect.y -= dir * (push / 2);
-      b.rect.y += dir * (push / 2);
+      a.logicY -= dir * (push / 2);
+      b.logicY += dir * (push / 2);
     }
   }
 
-  /** Melé aliado–enemigo: solo el aliado cede; el enemigo no es desplazado. */
-  private pushCrossOnlyAlly(
-    ally: UnitRow,
-    _enemy: UnitRow,
+  /** En melé entre jugadores, el de menor playerId cede (generaliza al antiguo aliado). */
+  private pushCrossDisplaceLower(
+    lower: UnitRow,
+    other: UnitRow,
     overlapX: number,
     overlapY: number,
   ) {
-    const dx = _enemy.rect.x - ally.rect.x;
-    const dy = _enemy.rect.y - ally.rect.y;
+    const dx = other.logicX - lower.logicX;
+    const dy = other.logicY - lower.logicY;
     if (overlapX < overlapY) {
       const dir = dx >= 0 ? 1 : -1;
-      ally.rect.x -= dir * overlapX;
+      lower.logicX -= dir * overlapX;
     } else {
       const dir = dy >= 0 ? 1 : -1;
-      ally.rect.y -= dir * overlapY;
+      lower.logicY -= dir * overlapY;
     }
   }
 
@@ -325,95 +582,35 @@ export class BattleScene extends Phaser.Scene {
     for (const u of this.units) {
       if (u.hp <= 0 || u.isBase) continue;
       const { hw, hh } = collisionHalf(u);
-      u.rect.x = Phaser.Math.Clamp(u.rect.x, hw, mapWidth - hw);
-      u.rect.y = Phaser.Math.Clamp(u.rect.y, hh, mapHeight - hh);
+      u.logicX = Phaser.Math.Clamp(u.logicX, hw, mapWidth - hw);
+      u.logicY = Phaser.Math.Clamp(u.logicY, hh, mapHeight - hh);
     }
-  }
-
-  private spawnAlly() {
-    const def = this.balance.units.soldier_ally;
-    const { mapWidth, mapHeight, baseWidth, baseHeight } = this.balance;
-    const allyIdx = this.units.filter((x) => !x.isBase && x.team === "ally")
-      .length;
-    const sx =
-      mapWidth / 2 + ((allyIdx % 9) - 4) * 26;
-    const sy = mapHeight - baseHeight - 12;
-    const rect = this.add.rectangle(sx, sy, 18, 18, 0x457b9d);
-    const row: UnitRow = {
-      id: uid(),
-      team: "ally",
-      hp: def.maxHp,
-      maxHp: def.maxHp,
-      attack: def.attack,
-      speed: def.speed,
-      attackIntervalMs: attackIntervalFromAps(
-        def.attacksPerSecond,
-        this.balance.attackCooldownMs,
-      ),
-      rect,
-      lastStrikeAt: 0,
-      isBase: false,
-    };
-    this.units.push(row);
-    this.attachHpBar(row, false);
   }
 
   private pickAttackTargetUnit(u: UnitRow): UnitRow | null {
-    if (u.team === "ally") {
-      const foes = this.units.filter(
-        (o) => o.team === "enemy" && o.hp > 0 && !o.isBase,
-      );
-      if (foes.length === 0) return null;
-      let best = foes[0];
-      let bestD = Phaser.Math.Distance.Between(
-        u.rect.x,
-        u.rect.y,
-        best.rect.x,
-        best.rect.y,
-      );
-      for (let i = 1; i < foes.length; i++) {
-        const d = Phaser.Math.Distance.Between(
-          u.rect.x,
-          u.rect.y,
-          foes[i].rect.x,
-          foes[i].rect.y,
-        );
-        if (d < bestD) {
-          bestD = d;
-          best = foes[i];
-        }
-      }
-      return best;
-    }
-
-    const candidates: UnitRow[] = [];
-    if (this.baseRow && this.baseRow.hp > 0) {
-      candidates.push(this.baseRow);
-    }
-    for (const o of this.units) {
-      if (o.team === "ally" && !o.isBase && o.hp > 0) {
-        candidates.push(o);
-      }
-    }
-    if (candidates.length === 0) return null;
-    let best = candidates[0];
-    let bestD = Phaser.Math.Distance.Between(
-      u.rect.x,
-      u.rect.y,
-      best.rect.x,
-      best.rect.y,
+    const foes = this.units.filter(
+      (o) => o.playerId !== u.playerId && o.hp > 0,
     );
-    for (let i = 1; i < candidates.length; i++) {
-      const c = candidates[i];
+    if (foes.length === 0) return null;
+
+    let best = foes[0];
+    let bestD = Phaser.Math.Distance.Between(
+      u.logicX,
+      u.logicY,
+      best.logicX,
+      best.logicY,
+    );
+    for (let i = 1; i < foes.length; i++) {
+      const o = foes[i];
       const d = Phaser.Math.Distance.Between(
-        u.rect.x,
-        u.rect.y,
-        c.rect.x,
-        c.rect.y,
+        u.logicX,
+        u.logicY,
+        o.logicX,
+        o.logicY,
       );
       if (d < bestD) {
         bestD = d;
-        best = c;
+        best = o;
       }
     }
     return best;
@@ -428,7 +625,7 @@ export class BattleScene extends Phaser.Scene {
       if (attacker.attack <= 0) continue;
       if (now - attacker.lastStrikeAt < attacker.attackIntervalMs) continue;
 
-      const foes = alive.filter((t) => t.team !== attacker.team);
+      const foes = alive.filter((t) => t.playerId !== attacker.playerId);
       let target: UnitRow | null = null;
       let bestGap = Infinity;
       for (const t of foes) {
@@ -442,9 +639,9 @@ export class BattleScene extends Phaser.Scene {
 
       target.hp -= attacker.attack;
       attacker.lastStrikeAt = now;
-      if (target.hp <= 0 && target.isBase) {
-        this.spawnTimer.remove(false);
-        this.combatTimer.remove(false);
+
+      if (target.isBase && target.hp <= 0) {
+        this.checkMatchEndAfterBaseHit();
       }
     }
 
@@ -453,7 +650,7 @@ export class BattleScene extends Phaser.Scene {
       if (u.hp > 0 || u.isBase) {
         next.push(u);
       } else {
-        u.rect.destroy();
+        u.sprite.destroy();
         u.hpBarBg?.destroy();
         u.hpBarFill?.destroy();
       }
@@ -461,14 +658,55 @@ export class BattleScene extends Phaser.Scene {
     this.units = next;
   }
 
+  /**
+   * Fin de partida: derrota si cae la base humana (0); victoria si todas las bases IA están a 0.
+   * Si ambas condiciones coinciden, cuenta derrota.
+   */
+  private checkMatchEndAfterBaseHit() {
+    if (this.matchEnded) return;
+
+    const humanDead = !!(this.bases[0] && this.bases[0].hp <= 0);
+    const aiBases = this.bases.slice(1);
+    const hasRivals =
+      this.balance.playerCount > 1 && aiBases.length > 0;
+    const allAiDead =
+      hasRivals && aiBases.every((b) => b && b.hp <= 0);
+
+    let outcome: MatchOutcome | null = null;
+    if (humanDead) {
+      outcome = "defeat";
+    } else if (allAiDead) {
+      outcome = "victory";
+    }
+
+    if (!outcome) return;
+
+    this.matchEnded = true;
+    this.spawnTimer.remove(false);
+    this.combatTimer.remove(false);
+    this.game.events.emit("match-end", { outcome });
+  }
+
   private refreshHud() {
-    const hp = this.baseRow?.hp ?? 0;
-    const max = this.baseRow?.maxHp ?? 1;
-    const allies = this.units.filter((u) => u.team === "ally" && !u.isBase)
+    const humanBase = this.bases[0];
+    const hp0 = humanBase?.hp ?? 0;
+    const max0 = humanBase?.maxHp ?? 1;
+    const parts: string[] = [
+      `Humano: ${Math.max(0, hp0)}/${max0}`,
+    ];
+
+    for (let p = 1; p < this.balance.playerCount; p++) {
+      const b = this.bases[p];
+      parts.push(`IA${p}: ${Math.max(0, b?.hp ?? 0)}/${b?.maxHp ?? 1}`);
+    }
+
+    const mine = this.units.filter((u) => u.playerId === 0 && !u.isBase && u.hp > 0)
       .length;
-    const enemies = this.units.filter((u) => u.team === "enemy").length;
-    this.hud.setText(
-      `Base: ${Math.max(0, hp)} / ${max}  |  Aliados: ${allies}  |  Enemigos: ${enemies}`,
-    );
+    const theirs = this.units.filter(
+      (u) => u.playerId !== 0 && !u.isBase && u.hp > 0,
+    ).length;
+    parts.push(`Unidades H:${mine} rival:${theirs}`);
+
+    this.hud.setText(parts.join("  |  "));
   }
 }

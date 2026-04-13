@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Engine RTS",
-  description: "RTS cenital — Next.js + Phaser",
+  title: "Battlefront Engine System",
+  description: "Battlefront Engine System — RTS cenital con Next.js y Phaser",
 };
 
 export default function RootLayout({

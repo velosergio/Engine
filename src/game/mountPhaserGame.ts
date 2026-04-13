@@ -12,9 +12,11 @@ export function mountPhaserGame(
     width: balance.mapWidth,
     height: balance.mapHeight,
     backgroundColor: "#151a24",
+    antialias: false,
     scene: [BattleScene],
+    audio: { noAudio: true },
     scale: {
-      mode: Phaser.Scale.FIT,
+      mode: Phaser.Scale.ENVELOP,
       autoCenter: Phaser.Scale.CENTER_BOTH,
     },
   };

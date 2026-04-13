@@ -23,6 +23,14 @@ export type GameBalancePayload = {
   baseHeight: number;
   aiSeparationRadiusPx: number;
   aiSeparationWeight: number;
+  /** Jugadores totales (0 = humano; 1..N-1 IA). Mínimo 2. */
+  playerCount: number;
+  /** Reglas GameRule: attack_speed_upgrade_initial_cost */
+  attackSpeedUpgradeInitialCost: number;
+  /** Reglas GameRule: attack_speed_upgrade_price_mult */
+  attackSpeedUpgradePriceMult: number;
+  /** Reglas GameRule: attack_speed_aps_per_purchase */
+  attackSpeedApsPerPurchase: number;
 };
 
 /** Intervalo entre golpes en ms; sin APS válido → fallback. */

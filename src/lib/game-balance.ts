@@ -32,19 +32,37 @@ export async function getGameBalance(): Promise<GameBalancePayload> {
   }
 
   const fallbackCd = ruleNum(rules, "attack_cooldown_ms", 1000);
+  const rawPlayers = ruleNum(rules, "player_count", 2);
+  const playerCount = Math.max(2, Math.min(8, Math.floor(rawPlayers)));
 
   return {
     units,
     spawnIntervalMs: ruleNum(rules, "spawn_interval_ms", 5000),
-    meleeRangePx: ruleNum(rules, "melee_range_px", 28),
-    meleeEdgeGapMaxPx: ruleNum(rules, "melee_edge_gap_max_px", 16),
+    meleeRangePx: ruleNum(rules, "melee_range_px", 56),
+    meleeEdgeGapMaxPx: ruleNum(rules, "melee_edge_gap_max_px", 32),
     attackCooldownMs: fallbackCd,
     combatTickMs: ruleNum(rules, "combat_tick_ms", 200),
-    mapWidth: ruleNum(rules, "map_width", 960),
-    mapHeight: ruleNum(rules, "map_height", 540),
-    baseWidth: ruleNum(rules, "base_width", 200),
-    baseHeight: ruleNum(rules, "base_height", 48),
-    aiSeparationRadiusPx: ruleNum(rules, "ai_separation_radius_px", 48),
+    mapWidth: ruleNum(rules, "map_width", 1920),
+    mapHeight: ruleNum(rules, "map_height", 1080),
+    baseWidth: ruleNum(rules, "base_width", 400),
+    baseHeight: ruleNum(rules, "base_height", 96),
+    aiSeparationRadiusPx: ruleNum(rules, "ai_separation_radius_px", 96),
     aiSeparationWeight: ruleNum(rules, "ai_separation_weight", 3.2),
+    playerCount,
+    attackSpeedUpgradeInitialCost: ruleNum(
+      rules,
+      "attack_speed_upgrade_initial_cost",
+      14,
+    ),
+    attackSpeedUpgradePriceMult: ruleNum(
+      rules,
+      "attack_speed_upgrade_price_mult",
+      1.3,
+    ),
+    attackSpeedApsPerPurchase: ruleNum(
+      rules,
+      "attack_speed_aps_per_purchase",
+      0.15,
+    ),
   };
 }

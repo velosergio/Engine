@@ -26,17 +26,7 @@ export default async function GamePage() {
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center py-6">
-      <div className="mb-4 flex w-full max-w-4xl items-center justify-between px-4">
-        <Link
-          href="/"
-          className="text-sm text-zinc-400 underline hover:text-zinc-200"
-        >
-          ← Inicio
-        </Link>
-        <h1 className="text-lg font-medium text-zinc-200">RTS — vista cenital</h1>
-        <span className="w-16" aria-hidden />
-      </div>
+    <main className="relative h-dvh w-full overflow-hidden bg-[#0c0f14]">
       <GameClientGate balance={balance} />
     </main>
   );
