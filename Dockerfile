@@ -16,6 +16,7 @@ ENV DATABASE_URL=${DATABASE_URL}
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
+COPY scripts/seed-if-empty.mjs ./scripts/seed-if-empty.mjs
 
 RUN npm ci --legacy-peer-deps
 
@@ -45,6 +46,7 @@ ENV DATABASE_URL=${DATABASE_URL}
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
+COPY scripts/seed-if-empty.mjs ./scripts/seed-if-empty.mjs
 
 RUN npm ci --legacy-peer-deps
 
@@ -53,4 +55,4 @@ COPY --from=builder /app/next.config.ts ./next.config.ts
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx prisma migrate deploy && node -e \"const {execSync}=require('node:child_process'); const {PrismaClient}=require('@prisma/client'); (async()=>{const p=new PrismaClient(); try { const count=await p.unitDefinition.count(); if(count===0){ console.log('DB vacia: ejecutando seed...'); execSync('npx prisma db seed',{stdio:'inherit'}); } else { console.log('DB con datos: se omite seed.'); } } finally { await p.\\$disconnect(); } })().catch((e)=>{ console.error(e); process.exit(1); });\" && npm run start"]
+CMD ["sh", "-c", "npx prisma migrate deploy && node ./scripts/seed-if-empty.mjs && npm run start"]
