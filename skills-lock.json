@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "skills": {
+    "Writing Phaser 3 Games": {
+      "source": "tomcoolpxl/sugar-splat",
+      "sourceType": "github",
+      "computedHash": "b0fd09950905daaf3309ee8975f27c40766c4ea7beefa2ab1d9f21d1ca771266"
+    },
+    "game-assets": {
+      "source": "opusgamelabs/game-creator",
+      "sourceType": "github",
+      "computedHash": "11874de3054e82b21db3b090e45f65555b7540b22b8de98f692a38d7324acda8"
+    },
+    "make-game": {
+      "source": "opusgamelabs/game-creator",
+      "sourceType": "github",
+      "computedHash": "67f80365ab43c68983cc7f7f56a007dd21b8cd4b7f2c347bf8aaa128ad883ede"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "43ca6c197f8ec13055079da7053232d477068b03ca443f9ac1bc819b95cdd432"
+    }
+  }
+}
