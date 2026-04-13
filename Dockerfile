@@ -10,6 +10,9 @@ FROM base AS deps
 
 WORKDIR /app
 
+ARG DATABASE_URL=mysql://root:root@127.0.0.1:3306/engine
+ENV DATABASE_URL=${DATABASE_URL}
+
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
