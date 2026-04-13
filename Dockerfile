@@ -12,6 +12,7 @@ WORKDIR /app
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
 
 RUN npm ci --legacy-peer-deps
 
@@ -40,6 +41,7 @@ ENV DATABASE_URL=${DATABASE_URL}
 
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+COPY prisma.config.ts ./prisma.config.ts
 
 RUN npm ci --legacy-peer-deps
 
