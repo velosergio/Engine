@@ -17,8 +17,9 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 COPY scripts/seed-if-empty.mjs ./scripts/seed-if-empty.mjs
+COPY scripts/seed-runtime.mjs ./scripts/seed-runtime.mjs
 
-RUN npm ci --legacy-peer-deps
+RUN npm ci --legacy-peer-deps --include=dev
 
 FROM base AS builder
 
@@ -47,6 +48,7 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 COPY prisma.config.ts ./prisma.config.ts
 COPY scripts/seed-if-empty.mjs ./scripts/seed-if-empty.mjs
+COPY scripts/seed-runtime.mjs ./scripts/seed-runtime.mjs
 
 RUN npm ci --legacy-peer-deps
 

@@ -36,7 +36,7 @@ async function main() {
     const count = await prisma.unitDefinition.count();
     if (count === 0) {
       console.log("DB vacia: ejecutando seed...");
-      execSync("npm run db:seed", { stdio: "inherit" });
+      execSync("node ./scripts/seed-runtime.mjs", { stdio: "inherit" });
     } else {
       console.log("DB con datos: se omite seed.");
     }
