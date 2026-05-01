@@ -10,7 +10,7 @@ export function parseMysqlUrl(connectionString: string) {
   const slash = rest.indexOf("/");
   const hostPort = slash >= 0 ? rest.slice(0, slash) : rest;
   const database =
-    slash >= 0 ? rest.slice(slash + 1).split("?")[0] ?? "" : "";
+    slash >= 0 ? (rest.slice(slash + 1).split("?")[0] ?? "") : "";
   const [host, portStr] = hostPort.includes(":")
     ? splitOnce(hostPort, ":")
     : [hostPort, "3306"];

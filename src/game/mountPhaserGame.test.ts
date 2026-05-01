@@ -20,8 +20,8 @@ vi.mock("@/game/scenes/BattleScene", () => ({
   BattleScene: class BattleScene {},
 }));
 
-import type { GameBalancePayload } from "@/lib/game-balance-types";
 import { mountPhaserGame } from "@/game/mountPhaserGame";
+import type { GameBalancePayload } from "@/lib/game-balance-types";
 
 describe("mountPhaserGame", () => {
   beforeEach(() => {
@@ -56,7 +56,10 @@ describe("mountPhaserGame", () => {
       | [{ width: number; height: number; scene: unknown[] }]
       | undefined;
     expect(firstCall).toBeDefined();
-    const cfg = firstCall![0];
+    if (!firstCall) {
+      throw new Error("Se esperaba al menos una llamada a Phaser.Game");
+    }
+    const cfg = firstCall[0];
     expect(cfg.width).toBe(640);
     expect(cfg.height).toBe(480);
     expect(Array.isArray(cfg.scene)).toBe(true);

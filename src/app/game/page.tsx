@@ -11,7 +11,9 @@ export default async function GamePage() {
   } catch {
     return (
       <main className="mx-auto max-w-lg p-8 text-center">
-        <h1 className="mb-4 text-xl font-semibold">No se pudo cargar el juego</h1>
+        <h1 className="mb-4 text-xl font-semibold">
+          No se pudo cargar el juego
+        </h1>
         <p className="mb-6 text-zinc-400">
           Comprueba que MariaDB esté en marcha, que exista la BD{" "}
           <code className="text-zinc-200">engine</code> y ejecuta{" "}

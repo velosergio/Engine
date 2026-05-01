@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { BattleScene } from "@/game/scenes/BattleScene";
+import type { BattleScene } from "@/game/scenes/BattleScene";
 
 const DEBUG_LUMP = 1_000_000;
 

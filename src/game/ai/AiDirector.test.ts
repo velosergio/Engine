@@ -1,12 +1,12 @@
+import type { Mock } from "vitest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AiDirector, type BattleAiApi } from "@/game/ai/AiDirector";
 import {
   AI_INITIAL_GOLD_PER_SEC,
   DAMAGE_UPGRADE_PRICE_MULT,
   INITIAL_DAMAGE_UPGRADE_COST,
   INITIAL_INCOME_UPGRADE_COST,
 } from "@/lib/damage-upgrade-economy";
-import { AiDirector, type BattleAiApi } from "@/game/ai/AiDirector";
-import type { Mock } from "vitest";
 
 type ApplyDamage = BattleAiApi["applyDamageUpgradeForPlayer"];
 type ApplyAps = BattleAiApi["applyAttackSpeedUpgradeForPlayer"];
@@ -91,7 +91,10 @@ describe("AiDirector", () => {
       applyDamageUpgradeForPlayer,
       applyAttackSpeedUpgradeForPlayer: vi.fn<ApplyAps>(() => true),
     });
-    d.onMatchStart({ playerCount: 1, balance: { ...balanceStub, playerCount: 1 } });
+    d.onMatchStart({
+      playerCount: 1,
+      balance: { ...balanceStub, playerCount: 1 },
+    });
     for (let i = 0; i < 500; i++) {
       d.onTick(i * 500, { time: i * 500, playerCount: 1, deltaMs: 500 });
     }

@@ -1,12 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import * as Phaser from "phaser";
+import type * as Phaser from "phaser";
 import { useCallback, useRef, useState } from "react";
-import type { GameBalancePayload } from "@/lib/game-balance-types";
-import type { MatchEndPayload, MatchOutcome } from "@/lib/match-end-types";
 import { GameInfoSidebar } from "@/components/game/GameInfoSidebar";
 import { MatchEndModal } from "@/components/game/MatchEndModal";
+import type { GameBalancePayload } from "@/lib/game-balance-types";
+import type { MatchEndPayload, MatchOutcome } from "@/lib/match-end-types";
 
 const GameClient = dynamic(
   () =>

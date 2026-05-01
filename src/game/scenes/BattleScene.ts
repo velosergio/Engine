@@ -1,15 +1,15 @@
 import * as Phaser from "phaser";
 import { AiDirector } from "@/game/ai/AiDirector";
-import { DAMAGE_BONUS_PER_PURCHASE } from "@/lib/damage-upgrade-economy";
-import { type GameBalancePayload } from "@/lib/game-balance-types";
-import type { MatchOutcome } from "@/lib/match-end-types";
-import { soldierAttackIntervalMs } from "@/lib/soldier-attack-interval";
 import {
   registerBattleTextures,
   TEX_ALLY,
   TEX_BASE,
   TEX_GROUND,
 } from "@/game/pixel/renderPixelArt";
+import { DAMAGE_BONUS_PER_PURCHASE } from "@/lib/damage-upgrade-economy";
+import type { GameBalancePayload } from "@/lib/game-balance-types";
+import type { MatchOutcome } from "@/lib/match-end-types";
+import { soldierAttackIntervalMs } from "@/lib/soldier-attack-interval";
 
 type UnitRow = {
   id: string;
@@ -101,7 +101,10 @@ export class BattleScene extends Phaser.Scene {
 
     const baseDef = this.balance.units.base;
     this.attackBonusByPlayer = Array.from({ length: playerCount }, () => 0);
-    this.attackSpeedApsBonusByPlayer = Array.from({ length: playerCount }, () => 0);
+    this.attackSpeedApsBonusByPlayer = Array.from(
+      { length: playerCount },
+      () => 0,
+    );
     this.bases = Array.from({ length: playerCount }, () => null);
 
     for (let p = 0; p < playerCount; p++) {
@@ -291,7 +294,10 @@ export class BattleScene extends Phaser.Scene {
     this.spawnSlotIndex += 1;
 
     this.spawnSoldierForPlayer(0, slot);
-    this.aiDirector.onHumanBaseCommand({ type: "spawn_soldier", slotIndex: slot });
+    this.aiDirector.onHumanBaseCommand({
+      type: "spawn_soldier",
+      slotIndex: slot,
+    });
 
     for (let p = 1; p < this.balance.playerCount; p++) {
       this.spawnSoldierForPlayer(p, slot);
@@ -392,9 +398,7 @@ export class BattleScene extends Phaser.Scene {
     for (const u of this.units) {
       if (u.hp <= 0 && !u.isBase) continue;
       const bob =
-        !u.isBase && u.hp > 0
-          ? Math.sin(t * 0.007 + u.bobPhase) * 1.5
-          : 0;
+        !u.isBase && u.hp > 0 ? Math.sin(t * 0.007 + u.bobPhase) * 1.5 : 0;
       u.sprite.setPosition(u.logicX, u.logicY + bob);
     }
   }
@@ -458,7 +462,10 @@ export class BattleScene extends Phaser.Scene {
   }
 
   /** IA (norte): barra bajo la unidad; humano: barra encima. */
-  private hpBarRectOrigin(u: UnitRow, isBase: boolean): { x: number; y: number } {
+  private hpBarRectOrigin(
+    u: UnitRow,
+    isBase: boolean,
+  ): { x: number; y: number } {
     const bw = isBase ? 224 : 60;
     const yOffAbove = isBase ? 72 : 30;
     const gapBelow = 10;
@@ -667,10 +674,8 @@ export class BattleScene extends Phaser.Scene {
 
     const humanDead = !!(this.bases[0] && this.bases[0].hp <= 0);
     const aiBases = this.bases.slice(1);
-    const hasRivals =
-      this.balance.playerCount > 1 && aiBases.length > 0;
-    const allAiDead =
-      hasRivals && aiBases.every((b) => b && b.hp <= 0);
+    const hasRivals = this.balance.playerCount > 1 && aiBases.length > 0;
+    const allAiDead = hasRivals && aiBases.every((b) => b && b.hp <= 0);
 
     let outcome: MatchOutcome | null = null;
     if (humanDead) {
@@ -691,17 +696,16 @@ export class BattleScene extends Phaser.Scene {
     const humanBase = this.bases[0];
     const hp0 = humanBase?.hp ?? 0;
     const max0 = humanBase?.maxHp ?? 1;
-    const parts: string[] = [
-      `Humano: ${Math.max(0, hp0)}/${max0}`,
-    ];
+    const parts: string[] = [`Humano: ${Math.max(0, hp0)}/${max0}`];
 
     for (let p = 1; p < this.balance.playerCount; p++) {
       const b = this.bases[p];
       parts.push(`IA${p}: ${Math.max(0, b?.hp ?? 0)}/${b?.maxHp ?? 1}`);
     }
 
-    const mine = this.units.filter((u) => u.playerId === 0 && !u.isBase && u.hp > 0)
-      .length;
+    const mine = this.units.filter(
+      (u) => u.playerId === 0 && !u.isBase && u.hp > 0,
+    ).length;
     const theirs = this.units.filter(
       (u) => u.playerId !== 0 && !u.isBase && u.hp > 0,
     ).length;

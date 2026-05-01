@@ -36,9 +36,7 @@ describe("MatchEndModal", () => {
   it("derrota muestra mensaje y enlace al menú", () => {
     render(<MatchEndModal outcome="defeat" />);
     expect(screen.getByText("Derrota")).toBeInTheDocument();
-    expect(
-      screen.getByText("Tu base ha sido destruida."),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Tu base ha sido destruida.")).toBeInTheDocument();
     expect(
       screen.getByRole("link", { name: /volver al menú/i }),
     ).toHaveAttribute("href", "/");

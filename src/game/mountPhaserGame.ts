@@ -1,6 +1,6 @@
 import * as Phaser from "phaser";
-import type { GameBalancePayload } from "@/lib/game-balance-types";
 import { BattleScene } from "@/game/scenes/BattleScene";
+import type { GameBalancePayload } from "@/lib/game-balance-types";
 
 export function mountPhaserGame(
   parent: HTMLElement,

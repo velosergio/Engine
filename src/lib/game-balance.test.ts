@@ -56,19 +56,13 @@ describe("getGameBalance", () => {
 
   it("acota player_count entre 2 y 8", async () => {
     findManyUnits.mockResolvedValue([]);
-    findManyRules.mockResolvedValue([
-      { key: "player_count", value: "1" },
-    ]);
+    findManyRules.mockResolvedValue([{ key: "player_count", value: "1" }]);
     expect((await getGameBalance()).playerCount).toBe(2);
 
-    findManyRules.mockResolvedValue([
-      { key: "player_count", value: "10" },
-    ]);
+    findManyRules.mockResolvedValue([{ key: "player_count", value: "10" }]);
     expect((await getGameBalance()).playerCount).toBe(8);
 
-    findManyRules.mockResolvedValue([
-      { key: "player_count", value: "3.7" },
-    ]);
+    findManyRules.mockResolvedValue([{ key: "player_count", value: "3.7" }]);
     expect((await getGameBalance()).playerCount).toBe(3);
   });
 

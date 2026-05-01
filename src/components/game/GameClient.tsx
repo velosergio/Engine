@@ -1,10 +1,10 @@
 "use client";
 
-import * as Phaser from "phaser";
+import type * as Phaser from "phaser";
 import { useEffect, useRef } from "react";
+import { mountPhaserGame } from "@/game/mountPhaserGame";
 import type { GameBalancePayload } from "@/lib/game-balance-types";
 import type { MatchEndPayload } from "@/lib/match-end-types";
-import { mountPhaserGame } from "@/game/mountPhaserGame";
 
 type Props = {
   balance: GameBalancePayload;

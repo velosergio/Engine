@@ -1,5 +1,5 @@
-import { prisma } from "@/lib/prisma";
 import type { GameBalancePayload, UnitBalance } from "@/lib/game-balance-types";
+import { prisma } from "@/lib/prisma";
 
 export type { GameBalancePayload, UnitBalance } from "@/lib/game-balance-types";
 export { attackIntervalFromAps } from "@/lib/game-balance-types";

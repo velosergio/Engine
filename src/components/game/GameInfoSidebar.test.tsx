@@ -7,9 +7,9 @@ import {
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GameInfoSidebar } from "@/components/game/GameInfoSidebar";
 import { INITIAL_DAMAGE_UPGRADE_COST } from "@/lib/damage-upgrade-economy";
 import type { GameBalancePayload } from "@/lib/game-balance-types";
-import { GameInfoSidebar } from "@/components/game/GameInfoSidebar";
 
 vi.mock("next/link", () => ({
   default: ({

@@ -1,16 +1,15 @@
-import type { GameBalancePayload } from "@/lib/game-balance-types";
 import {
   AI_INITIAL_GOLD_PER_SEC,
   DAMAGE_UPGRADE_PRICE_MULT,
-  INITIAL_DAMAGE_UPGRADE_COST,
   INCOME_PER_UPGRADE_MULT,
   INCOME_UPGRADE_PRICE_MULT,
+  INITIAL_DAMAGE_UPGRADE_COST,
   INITIAL_INCOME_UPGRADE_COST,
 } from "@/lib/damage-upgrade-economy";
+import type { GameBalancePayload } from "@/lib/game-balance-types";
 
 /** Comandos emitidos desde la base humana (extensible para mejoras futuras). */
-export type HumanBaseCommand =
-  | { type: "spawn_soldier"; slotIndex: number };
+export type HumanBaseCommand = { type: "spawn_soldier"; slotIndex: number };
 
 export type MatchSnapshot = {
   time: number;
